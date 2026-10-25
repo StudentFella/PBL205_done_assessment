@@ -1,0 +1,17 @@
+{
+  "name": "pbt205-assessment1",
+  "version": "1.0.0",
+  "description": "PBT205 Assessment 1: chat, trading and contact tracing prototypes over RabbitMQ",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/integration.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "amqplib": "^2.2.0",
+    "express": "^5.3.0",
+    "ws": "^8.22.0"
+  }
+}

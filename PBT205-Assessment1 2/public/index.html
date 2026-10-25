@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PBT205 Prototypes</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 40px 20px; display: flex; justify-content: center; color: #222; }
+    .wrap { width: 560px; max-width: 100%; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    .sub { color: #666; margin: 0 0 20px; font-size: 14px; }
+    a.card { display: block; background: white; border-radius: 10px; padding: 18px 20px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.15); text-decoration: none; color: inherit; border-left: 5px solid #ff6600; }
+    a.card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.22); }
+    a.card b { font-size: 17px; }
+    a.card span { display: block; color: #666; font-size: 14px; margin-top: 4px; }
+    .note { font-size: 13px; color: #777; margin-top: 18px; line-height: 1.5; }
+    code { background: #e9e9eb; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>PBT205 Assessment 1</h1>
+    <p class="sub">Three prototypes talking through RabbitMQ</p>
+    <a class="card" href="chat.html"><b>Task 1: Chat</b><span>Join a room and chat with other users.</span></a>
+    <a class="card" href="trading.html"><b>Task 2: Trading</b><span>Send orders and watch the latest traded price.</span></a>
+    <a class="card" href="tracing.html"><b>Task 3: Contact tracing</b><span>Watch people move around the board and query who has met who.</span></a>
+    <p class="note">The GUIs are only one way in. Each task also has command-line programs
+      (<code>chat.js</code>, <code>sendOrder.js</code> and <code>exchange.js</code>, <code>person.js</code>, <code>tracker.js</code> and <code>query.js</code>)
+      that use the same RabbitMQ topics. See the README for how to run them.</p>
+  </div>
+</body>
+</html>

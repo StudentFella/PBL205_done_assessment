@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact Tracing</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 24px; color: #222; }
+    .top { max-width: 1060px; margin: 0 auto 12px; display: flex; align-items: baseline; gap: 16px; }
+    .top h1 { font-size: 22px; margin: 0; }
+    .top a { color: #666; font-size: 14px; text-decoration: none; }
+    .top a:hover { text-decoration: underline; }
+    #status { margin-left: auto; font-size: 13px; color: #888; }
+    #status.ok { color: #0a8f3c; }
+    #status.bad { color: #c62828; }
+    .layout { max-width: 1060px; margin: 0 auto; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+    .boardCard { flex: 0 0 auto; }
+    .side { flex: 1 1 320px; display: flex; flex-direction: column; gap: 16px; min-width: 300px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    canvas { display: block; width: 600px; height: 600px; max-width: 100%; border-radius: 6px; background: #fafafa; border: 1px solid #ddd; cursor: pointer; }
+    .meta { font-size: 13px; color: #666; margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+    .row { display: flex; gap: 6px; }
+    .row input { flex: 1; min-width: 0; }
+    input, button { font-size: 15px; padding: 9px; }
+    button { background: #ff6600; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #e55a00; }
+    button.alt { background: #e9e9eb; color: #333; }
+    button.alt:hover { background: #dcdce0; }
+    .hint { font-size: 12.5px; color: #777; margin-top: 6px; line-height: 1.4; }
+    #error { color: #c00; font-size: 14px; min-height: 18px; margin-top: 6px; }
+    .results { margin-top: 10px; font-size: 14px; }
+    .results .head { font-weight: bold; margin-bottom: 6px; }
+    .results ul { list-style: none; margin: 0; padding: 0; max-height: 230px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; }
+    .results li { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; display: flex; gap: 8px; align-items: baseline; }
+    .results li:last-child { border-bottom: none; }
+    .results li .who { font-weight: bold; }
+    .results li .where, .results li .when { color: #777; font-size: 12.5px; }
+    .results li .when { margin-left: auto; }
+    .empty { color: #888; }
+    #people { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; background: #f0f2f5; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+    .chip:hover { border-color: #ccc; }
+    .chip.sel { border-color: #ff6600; background: #fff1e8; }
+    .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .chip .pos { color: #888; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>Contact tracing</h1>
+    <a href="/">&larr; All prototypes</a>
+    <span id="status">Connecting...</span>
+  </div>
+
+  <div class="layout">
+    <div class="card boardCard">
+      <canvas id="board" width="600" height="600"></canvas>
+      <div class="meta">
+        <span id="boardInfo"></span>
+        <span><span class="swatch" style="background:#d9342b"></span>two or more people on one square</span>
+        <span><span class="swatch" style="background:#2a6fdb"></span>where the selected person met someone</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Who has this person met?</h2>
+        <div class="row">
+          <input id="queryId" placeholder="Person name" autocomplete="off">
+          <button id="queryBtn">Query</button>
+        </div>
+        <div id="error"></div>
+        <div id="results" class="results"><span class="empty">Type a name, or click someone on the board.</span></div>
+      </div>
+
+      <div class="card">
+        <h2>People on the board</h2>
+        <div id="people"><span class="empty">Nobody yet. Start some with person.js, or join below.</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Join as a person</h2>
+        <div id="joinBox">
+          <div class="row">
+            <input id="joinName" placeholder="Your name" autocomplete="off">
+            <button id="joinBtn">Join</button>
+          </div>
+          <div class="hint">You start on a random square. Move one square at a time with the arrow keys or WASD. Diagonals: Q, E, Z, C.</div>
+        </div>
+        <div id="playBox" style="display:none">
+          <div>Playing as <b id="playName"></b></div>
+          <div class="hint">Arrow keys / WASD to move. Q E Z C for diagonals.</div>
+          <button id="leaveBtn" class="alt" style="margin-top:8px">Leave the board</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/tracing`);
+
+    let boardSize = 10;
+    const people = new Map();     // id -> { x, y }
+    let selected = null;          // last person queried
+    let contactSquares = [];      // squares where they met someone
+    let contactNames = new Set(); // names they met
+    let me = null;                // us, if we joined
+
+    function colourFor(id) {
+      let h = 0;
+      for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 360;
+      return `hsl(${h}, 60%, 45%)`;
+    }
+
+    function setError(text) { $('error').textContent = text || ''; }
+
+    const canvas = $('board');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const css = canvas.clientWidth;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(css * dpr);
+      canvas.height = Math.round(css * dpr);
+      draw();
+    }
+
+    function draw() {
+      const W = canvas.width;
+      const dpr = window.devicePixelRatio || 1;
+      const cell = W / boardSize;          // one square in canvas pixels
+      ctx.clearRect(0, 0, W, W);
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, 0, W, W);
+
+      // no grid lines when squares are tiny
+      if (cell >= 8 * dpr) {
+        ctx.strokeStyle = '#e4e4e4';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i <= boardSize; i++) {
+          ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, W);
+          ctx.moveTo(0, i * cell); ctx.lineTo(W, i * cell);
+        }
+        ctx.stroke();
+      }
+
+      const mark = Math.max(cell, 8 * dpr); // so highlights still show on huge boards
+
+      // blue squares, where they met someone
+      ctx.fillStyle = 'rgba(42, 111, 219, 0.28)';
+      ctx.strokeStyle = '#2a6fdb';
+      ctx.lineWidth = 2 * dpr;
+      contactSquares.forEach((s) => {
+        const cx = (s.x + 0.5) * cell, cy = (s.y + 0.5) * cell;
+        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
+        ctx.strokeRect(cx - mark / 2, cy - mark / 2, mark, mark);
+      });
+
+      // people per square
+      const byCell = new Map();
+      people.forEach((p, id) => {
+        const k = p.x + ',' + p.y;
+        if (!byCell.has(k)) byCell.set(k, []);
+        byCell.get(k).push(id);
+      });
+
+      // red squares, 2 or more people
+      ctx.fillStyle = 'rgba(217, 52, 43, 0.28)';
+      ctx.strokeStyle = '#d9342b';
+      byCell.forEach((ids, k) => {
+        if (ids.length < 2) return;
+        const [x, y] = k.split(',').map(Number);
+        const cx = (x + 0.5) * cell, cy = (y + 0.5) * cell;
+        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
+        ctx.strokeRect(cx - mark / 2, cy - mark / 2, mark, mark);
+      });
+
+      const showNames = cell >= 36 * dpr;
+      byCell.forEach((ids, k) => {
+        const [x, y] = k.split(',').map(Number);
+        const cx = (x + 0.5) * cell, cy = (y + 0.5) * cell;
+        const r = Math.max(3 * dpr, Math.min(cell * 0.22, 11 * dpr));
+        ids.forEach((id, i) => {
+          // spread them in a ring if there's a few on one square
+          let px = cx, py = cy;
+          if (ids.length > 1) {
+            const a = (i / ids.length) * Math.PI * 2 - Math.PI / 2;
+            const spread = Math.min(cell * 0.28, 14 * dpr);
+            px += Math.cos(a) * spread;
+            py += Math.sin(a) * spread;
+          }
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fillStyle = colourFor(id);
+          ctx.fill();
+          if (id === selected || contactNames.has(id) || id === me) {
+            ctx.lineWidth = 2.5 * dpr;
+            ctx.strokeStyle = id === selected ? '#ff6600' : id === me ? '#111' : '#2a6fdb';
+            ctx.stroke();
+          }
+          if (showNames) {
+            ctx.fillStyle = '#222';
+            ctx.font = `${11 * dpr}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(id, px, py + r + 12 * dpr);
+          }
+        });
+      });
+    }
+
+    function renderPeople() {
+      const box = $('people');
+      if (!people.size) { box.innerHTML = '<span class="empty">Nobody yet. Start some with person.js, or join below.</span>'; return; }
+      box.innerHTML = '';
+      [...people.keys()].sort().forEach((id) => {
+        const p = people.get(id);
+        const chip = document.createElement('span');
+        chip.className = 'chip' + (id === selected ? ' sel' : '');
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = colourFor(id);
+        const name = document.createElement('span');
+        name.textContent = id;
+        const pos = document.createElement('span');
+        pos.className = 'pos';
+        pos.textContent = `(${p.x}, ${p.y})`;
+        chip.append(dot, name, pos);
+        chip.onclick = () => runQuery(id);
+        box.appendChild(chip);
+      });
+      $('boardInfo').textContent = `${boardSize} x ${boardSize} board, ${people.size} ${people.size === 1 ? 'person' : 'people'}`;
+    }
+
+    function renderResults(res) {
+      const box = $('results');
+      box.innerHTML = '';
+      if (!res.known) {
+        box.innerHTML = '<span class="empty"></span>';
+        box.firstChild.textContent = `The tracker does not know anyone called "${res.id}".`;
+        return;
+      }
+      if (!res.contacts.length) {
+        box.innerHTML = '<span class="empty"></span>';
+        box.firstChild.textContent = `${res.id} has not met anyone yet.`;
+        return;
+      }
+      const names = new Set(res.contacts.map((c) => c.with));
+      const head = document.createElement('div');
+      head.className = 'head';
+      head.textContent = `${res.id} has met ${names.size} ${names.size === 1 ? 'person' : 'people'} (${res.contacts.length} ${res.contacts.length === 1 ? 'contact' : 'contacts'}), most recent first`;
+      box.appendChild(head);
+      const ul = document.createElement('ul');
+      res.contacts.forEach((c) => {
+        const li = document.createElement('li');
+        const who = document.createElement('span'); who.className = 'who'; who.textContent = c.with;
+        who.style.color = colourFor(c.with);
+        const where = document.createElement('span'); where.className = 'where'; where.textContent = `at (${c.x}, ${c.y})`;
+        const when = document.createElement('span'); when.className = 'when'; when.textContent = new Date(c.time).toLocaleTimeString();
+        li.append(who, where, when);
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
+
+    function runQuery(id) {
+      id = (id || '').trim();
+      if (!id) return;
+      setError('');
+      $('queryId').value = id;
+      selected = id;
+      renderPeople();
+      draw();
+      ws.send(JSON.stringify({ type: 'query', id }));
+    }
+
+    ws.onopen = () => { $('status').textContent = 'Connected'; $('status').className = 'ok'; };
+    ws.onclose = () => { $('status').textContent = 'Disconnected. Reload the page once the server is back.'; $('status').className = 'bad'; };
+
+    ws.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.type === 'snapshot') {
+        boardSize = d.boardSize;
+        people.clear();
+        d.people.forEach((p) => people.set(p.id, { x: p.x, y: p.y }));
+        renderPeople(); draw();
+      } else if (d.type === 'position') {
+        people.set(d.id, { x: d.x, y: d.y });
+        renderPeople(); draw();
+      } else if (d.type === 'left') {
+        people.delete(d.id);
+        renderPeople(); draw();
+      } else if (d.type === 'result') {
+        if (d.id !== selected) return; // old answer, we've queried someone else since
+        contactSquares = d.contacts.map((c) => ({ x: c.x, y: c.y }));
+        contactNames = new Set(d.contacts.map((c) => c.with));
+        renderResults(d);
+        draw();
+      } else if (d.type === 'joined') {
+        me = d.id;
+        $('joinBox').style.display = 'none';
+        $('playBox').style.display = 'block';
+        $('playName').textContent = me;
+        setError('');
+        draw();
+      } else if (d.type === 'error') {
+        setError(d.text);
+      }
+    };
+
+    $('queryBtn').onclick = () => runQuery($('queryId').value);
+    $('queryId').addEventListener('keydown', (e) => { if (e.key === 'Enter') runQuery($('queryId').value); });
+
+    $('joinBtn').onclick = () => ws.send(JSON.stringify({ type: 'join', id: $('joinName').value }));
+    $('joinName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
+    $('leaveBtn').onclick = () => {
+      ws.send(JSON.stringify({ type: 'leave' }));
+      me = null;
+      $('joinBox').style.display = 'block';
+      $('playBox').style.display = 'none';
+      draw();
+    };
+
+    const KEYS = {
+      ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1],
+      ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
+      q: [-1, -1], e: [1, -1], z: [-1, 1], c: [1, 1]
+    };
+    document.addEventListener('keydown', (e) => {
+      if (!me || e.target.tagName === 'INPUT') return;
+      const m = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+      if (!m) return;
+      e.preventDefault();
+      ws.send(JSON.stringify({ type: 'move', dx: m[0], dy: m[1] }));
+    });
+
+    // click a person to query them
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor(((e.clientX - rect.left) / rect.width) * boardSize);
+      const y = Math.floor(((e.clientY - rect.top) / rect.height) * boardSize);
+      // squares are tiny on big boards so allow a click that's a bit off
+      const reach = boardSize > 100 ? Math.ceil(boardSize / 100) : 0;
+      let best = null, bestDist = Infinity;
+      people.forEach((p, id) => {
+        const dist = Math.max(Math.abs(p.x - x), Math.abs(p.y - y));
+        if (dist <= reach && dist < bestDist) { best = id; bestDist = dist; }
+      });
+      if (best) runQuery(best);
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
