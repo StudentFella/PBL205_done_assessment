@@ -8,6 +8,8 @@ Running it
 2. `npm install` (once)
 3. `node server.js` then go to http://localhost:3000. You can add the rabbitmq port and board size if you want, like `node server.js 5672 20`
 
+Or to start the web server, the exchange and the tracker together: `npm run all` (add the rabbitmq port and board size with `node start-all.js 5672 20`). Ctrl+C stops all three.
+
 In all the commands below `port` is the rabbitmq port, normally 5672.
 
 Task 1, chat

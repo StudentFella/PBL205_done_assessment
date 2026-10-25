@@ -189,8 +189,8 @@
           // spread them in a ring if there's a few on one square
           let px = cx, py = cy;
           if (ids.length > 1) {
-            const a = (i / ids.length) * Math.PI * 2 - Math.PI / 2;
-            const spread = Math.min(cell * 0.28, 14 * dpr);
+            const a = (i / ids.length) * Math.PI * 2; // starts to the right, so two people sit side by side
+            const spread = Math.min(cell * 0.3, 26 * dpr);
             px += Math.cos(a) * spread;
             py += Math.sin(a) * spread;
           }
